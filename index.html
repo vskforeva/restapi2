@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Volunteer App</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    ul { padding-left: 0; }
+    li { list-style: none; margin-bottom: 8px; }
+    button { margin-left: 10px; }
+    input.edit-input {
+      width: 200px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+    <nav style="background:#333; padding:10px;">
+  <a href="index.html" style="color:#fff; margin-right:15px; text-decoration:none;">Волонтёры</a>
+  <a href="events.html" style="color:#fff; margin-right:15px; text-decoration:none;">Мероприятия</a>
+  <a href="registration.html" style="color:#fff; margin-right:15px; text-decoration:none;">Регистрация</a>
+  <a href="volunteer_stats.html" style="color:#fff; margin-right:15px; text-decoration:none;">Статистика</a>
+</nav>
+  <h1>Волонтёры</h1>
+  <ul id="volunteerList"></ul>
+
+  <h2>Добавить волонтёра</h2>
+  <form id="volForm">
+    <input type="text" id="name" placeholder="Имя" required />
+    <input type="email" id="email" placeholder="Email" />
+    <input type="text" id="phone" placeholder="Телефон" />
+    <button type="submit">Добавить</button>
+  </form>
+
+  <script>
+    const baseUrl = 'http://localhost:3000';
+
+    async function loadVolunteers() {
+      try {
+        const res = await fetch(`${baseUrl}/volunteers`);
+        if (!res.ok) throw new Error('Ошибка загрузки волонтёров');
+        const volunteers = await res.json();
+        const list = document.getElementById('volunteerList');
+        list.innerHTML = '';
+
+        volunteers.forEach(v => {
+          const li = document.createElement('li');
+          li.dataset.id = v.vol_id;
+
+          // Отображаем данные волонтера
+          li.innerHTML = `
+            <span class="vol-info">${v.name} (${v.email || '-'}, ${v.phone || '-'})</span>
+            <button class="edit-btn">Редактировать</button>
+            <button class="delete-btn">Удалить</button>
+          `;
+
+          list.appendChild(li);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить волонтёров');
+      }
+    }
+
+    // Обработчик добавления нового волонтёра
+    document.getElementById('volForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+
+      if (!name) {
+        alert('Имя обязательно');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${baseUrl}/volunteers`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name, email, phone})
+        });
+        if (!res.ok) throw new Error('Ошибка при добавлении волонтёра');
+        await loadVolunteers();
+        e.target.reset();
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось добавить волонтёра');
+      }
+    });
+
+    // Делегирование событий для редактирования и удаления
+    document.getElementById('volunteerList').addEventListener('click', async (e) => {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const volId = li.dataset.id;
+
+      // Удаление
+      if (e.target.classList.contains('delete-btn')) {
+        if (!confirm('Удалить этого волонтёра?')) return;
+        try {
+          const res = await fetch(`${baseUrl}/volunteers/${volId}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Ошибка при удалении');
+          await loadVolunteers();
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось удалить волонтёра');
+        }
+      }
+
+      // Редактирование
+      if (e.target.classList.contains('edit-btn')) {
+        const span = li.querySelector('.vol-info');
+        const [name, rest] = span.textContent.split(' (');
+        const emailPhone = rest ? rest.slice(0, -1) : '';
+
+        // Создаем форму редактирования
+        li.innerHTML = `
+          <input type="text" class="edit-input" name="name" value="${name}" required />
+          <input type="email" class="edit-input" name="email" placeholder="Email" value="${emailPhone.split(', ')[0] || ''}" />
+          <input type="text" class="edit-input" name="phone" placeholder="Телефон" value="${emailPhone.split(', ')[1] || ''}" />
+          <button class="save-btn">Сохранить</button>
+          <button class="cancel-btn">Отмена</button>
+        `;
+      }
+
+      // Сохранение изменений
+      if (e.target.classList.contains('save-btn')) {
+        const inputs = li.querySelectorAll('input.edit-input');
+        const name = inputs[0].value.trim();
+        const email = inputs[1].value.trim();
+        const phone = inputs[2].value.trim();
+
+        if (!name) {
+          alert('Имя обязательно');
+          return;
+        }
+
+        try {
+          const res = await fetch(`${baseUrl}/volunteers/${volId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, email, phone})
+          });
+          if (!res.ok) throw new Error('Ошибка при обновлении');
+          await loadVolunteers();
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось обновить волонтёра');
+        }
+      }
+
+      // Отмена редактирования
+      if (e.target.classList.contains('cancel-btn')) {
+        await loadVolunteers();
+      }
+    });
+
+    // Загрузка списка при загрузке страницы
+    loadVolunteers();
+  </script>
+</body>
+</html>

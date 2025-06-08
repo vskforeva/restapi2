@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Мероприятия</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    ul { padding-left: 0; }
+    li { list-style: none; margin-bottom: 8px; }
+    button { margin-left: 10px; }
+    input.edit-input, select.edit-input {
+      width: 200px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+    <nav style="background:#333; padding:10px;">
+  <a href="index.html" style="color:#fff; margin-right:15px; text-decoration:none;">Волонтёры</a>
+  <a href="events.html" style="color:#fff; margin-right:15px; text-decoration:none;">Мероприятия</a>
+  <a href="registration.html" style="color:#fff; margin-right:15px; text-decoration:none;">Регистрация</a>
+  <a href="volunteer_stats.html" style="color:#fff; margin-right:15px; text-decoration:none;">Статистика</a>
+</nav>
+  <h1>Мероприятия</h1>
+  <ul id="eventList"></ul>
+
+  <h2>Добавить мероприятие</h2>
+  <form id="eventForm">
+    <input type="text" id="title" placeholder="Название" required />
+    <input type="text" id="location" placeholder="Место проведения" />
+    <input type="date" id="date" required />
+    <select id="organizer_id">
+      <option value="">Не указано</option>
+    </select>
+    <button type="submit">Добавить</button>
+  </form>
+
+  <script>
+    const baseUrl = 'http://localhost:3000';
+
+    async function loadOrganizers() {
+      try {
+        const res = await fetch(`${baseUrl}/organizers`);
+        if (!res.ok) throw new Error('Ошибка загрузки организаторов');
+        const organizers = await res.json();
+        const select = document.getElementById('organizer_id');
+        // Очистить, кроме первого "Не указано"
+        select.length = 1;
+        organizers.forEach(org => {
+          const option = document.createElement('option');
+          option.value = org.id;
+          option.textContent = org.name;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить организаторов');
+      }
+    }
+
+    async function loadEvents() {
+      try {
+        const res = await fetch(`${baseUrl}/events`);
+        if (!res.ok) throw new Error('Ошибка загрузки мероприятий');
+        const events = await res.json();
+        const list = document.getElementById('eventList');
+        list.innerHTML = '';
+
+        events.forEach(ev => {
+          const li = document.createElement('li');
+          li.dataset.id = ev.id;
+
+          li.innerHTML = `
+            <span class="event-info">
+              ${ev.title} — ${ev.location || '-'} — ${ev.date || '-'} — Организатор ID: ${ev.organizer_id || '-'}
+            </span>
+            <button class="edit-btn">Редактировать</button>
+            <button class="delete-btn">Удалить</button>
+          `;
+
+          list.appendChild(li);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить мероприятия');
+      }
+    }
+
+    document.getElementById('eventForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      const location = document.getElementById('location').value.trim();
+      const date = document.getElementById('date').value;
+      const organizer_id = document.getElementById('organizer_id').value || null;
+
+      if (!title || !date) {
+        alert('Пожалуйста, заполните обязательные поля: Название и Дата');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${baseUrl}/events`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title, location, date, organizer_id})
+        });
+        if (!res.ok) throw new Error('Ошибка при добавлении мероприятия');
+        await loadEvents();
+        e.target.reset();
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось добавить мероприятие');
+      }
+    });
+
+    document.getElementById('eventList').addEventListener('click', async (e) => {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const eventId = li.dataset.id;
+
+      if (e.target.classList.contains('delete-btn')) {
+        if (!confirm('Удалить это мероприятие?')) return;
+        try {
+          const res = await fetch(`${baseUrl}/events/${eventId}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Ошибка при удалении');
+          await loadEvents();
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось удалить мероприятие');
+        }
+      }
+
+      if (e.target.classList.contains('edit-btn')) {
+        const span = li.querySelector('.event-info');
+        const parts = span.textContent.split(' — ');
+        const [title, location, date, organizerPart] = parts;
+        const organizer_id = organizerPart ? organizerPart.replace('Организатор ID: ', '') : '';
+
+        // Создаем селект для редактирования организатора
+        const select = document.createElement('select');
+        select.className = 'edit-input';
+        select.name = 'organizer_id';
+
+        // Добавляем опцию "Не указано"
+        const optionNone = document.createElement('option');
+        optionNone.value = '';
+        optionNone.textContent = 'Не указано';
+        select.appendChild(optionNone);
+
+        // Загружаем организаторов и выбираем текущего
+        try {
+          const res = await fetch(`${baseUrl}/organizers`);
+          if (!res.ok) throw new Error('Ошибка загрузки организаторов');
+          const organizers = await res.json();
+          organizers.forEach(org => {
+            const option = document.createElement('option');
+            option.value = org.id;
+            option.textContent = org.name;
+            if (org.id.toString() === organizer_id) option.selected = true;
+            select.appendChild(option);
+          });
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось загрузить организаторов');
+        }
+
+        li.innerHTML = `
+          <input type="text" class="edit-input" name="title" value="${title}" required />
+          <input type="text" class="edit-input" name="location" placeholder="Место проведения" value="${location !== '-' ? location : ''}" />
+          <input type="date" class="edit-input" name="date" value="${date !== '-' ? date : ''}" required />
+        `;
+        li.appendChild(select);
+        li.innerHTML += `
+          <button class="save-btn">Сохранить</button>
+          <button class="cancel-btn">Отмена</button>
+        `;
+      }
+
+      if (e.target.classList.contains('save-btn')) {
+        const inputs = li.querySelectorAll('input.edit-input');
+        const title = inputs[0].value.trim();
+        const location = inputs[1].value.trim();
+        const date = inputs[2].value;
+        const select = li.querySelector('select.edit-input');
+        const organizer_id = select.value || null;
+
+        if (!title || !date) {
+          alert('Пожалуйста, заполните обязательные поля: Название и Дата');
+          return;
+        }
+
+        try {
+          const res = await fetch(`${baseUrl}/events/${eventId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, location, date, organizer_id})
+          });
+          if (!res.ok) throw new Error('Ошибка при обновлении');
+          await loadEvents();
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось обновить мероприятие');
+        }
+      }
+
+      if (e.target.classList.contains('cancel-btn')) {
+        await loadEvents();
+      }
+    });
+
+    // Загрузка данных при старте
+    loadOrganizers();
+    loadEvents();
+  </script>
+</body>
+</html>

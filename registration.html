@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Регистрация волонтёров на мероприятия</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    label, select, button { display: block; margin: 10px 0; }
+    select { width: 300px; padding: 5px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 30px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+    th { background-color: #f0f0f0; }
+    ul { margin: 0; padding-left: 20px; }
+    button.remove-vol {
+      margin-left: 10px;
+      color: red;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <nav style="background:#333; padding:10px;">
+    <a href="index.html" style="color:#fff; margin-right:15px; text-decoration:none;">Волонтёры</a>
+    <a href="events.html" style="color:#fff; margin-right:15px; text-decoration:none;">Мероприятия</a>
+    <a href="registration.html" style="color:#fff; margin-right:15px; text-decoration:none;">Регистрация</a>
+    <a href="volunteer_stats.html" style="color:#fff; margin-right:15px; text-decoration:none;">Статистика</a>
+  </nav>
+
+  <h1>Регистрация волонтёров на мероприятия</h1>
+
+  <form id="registrationForm">
+    <label for="volunteerSelect">Выберите волонтёра:</label>
+    <select id="volunteerSelect" required>
+      <option value="">-- Выберите волонтёра --</option>
+    </select>
+
+    <label for="eventSelect">Выберите мероприятие:</label>
+    <select id="eventSelect" required>
+      <option value="">-- Выберите мероприятие --</option>
+    </select>
+
+    <button type="submit">Зарегистрировать</button>
+  </form>
+
+  <div id="message" style="margin-top:20px; font-weight: bold;"></div>
+
+  <h2>Текущие регистрации</h2>
+  <table id="registrationsTable">
+    <thead>
+      <tr>
+        <th>Мероприятие</th>
+        <th>Дата</th>
+        <th>Зарегистрированные волонтёры</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Здесь будут данные -->
+    </tbody>
+  </table>
+
+  <script>
+    const baseUrl = 'http://localhost:3000';
+
+    async function loadVolunteers() {
+      try {
+        const res = await fetch(`${baseUrl}/volunteers`);
+        if (!res.ok) throw new Error('Ошибка загрузки волонтёров');
+        const volunteers = await res.json();
+        const select = document.getElementById('volunteerSelect');
+        volunteers.forEach(v => {
+          const option = document.createElement('option');
+          option.value = v.vol_id;
+          option.textContent = v.name;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить волонтёров');
+      }
+    }
+
+    async function loadEvents() {
+      try {
+        const res = await fetch(`${baseUrl}/events`);
+        if (!res.ok) throw new Error('Ошибка загрузки мероприятий');
+        const events = await res.json();
+        const select = document.getElementById('eventSelect');
+        events.forEach(ev => {
+          const option = document.createElement('option');
+          option.value = ev.id;
+          option.textContent = `${ev.title} (${ev.date || '-'})`;
+          select.appendChild(option);
+        });
+        return events;
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить мероприятия');
+        return [];
+      }
+    }
+
+    async function loadRegistrations() {
+      try {
+        const res = await fetch(`${baseUrl}/registrations`);
+        if (!res.ok) throw new Error('Ошибка загрузки регистраций');
+        const registrations = await res.json();
+
+        const eventsRes = await fetch(`${baseUrl}/events`);
+        if (!eventsRes.ok) throw new Error('Ошибка загрузки мероприятий');
+        const events = await eventsRes.json();
+
+        const volunteersRes = await fetch(`${baseUrl}/volunteers`);
+        if (!volunteersRes.ok) throw new Error('Ошибка загрузки волонтёров');
+        const volunteers = await volunteersRes.json();
+
+        // Группируем регистрации по event_id
+        const registrationsByEvent = {};
+        registrations.forEach(r => {
+          if (!registrationsByEvent[r.event_id]) {
+            registrationsByEvent[r.event_id] = [];
+          }
+          registrationsByEvent[r.event_id].push(r.volunteer_id);
+        });
+
+        const tbody = document.querySelector('#registrationsTable tbody');
+        tbody.innerHTML = '';
+
+        events.forEach(ev => {
+          const volIds = registrationsByEvent[ev.id] || [];
+          const volLis = volIds.map(id => {
+            const vol = volunteers.find(v => v.vol_id === id);
+            const name = vol ? vol.name : '(неизвестный волонтёр)';
+            return `<li>${name} <button class="remove-vol" data-vol-id="${id}" data-event-id="${ev.id}" title="Удалить волонтёра с мероприятия">×</button></li>`;
+          });
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${ev.title}</td>
+            <td>${ev.date || '-'}</td>
+            <td><ul>${volLis.join('')}</ul></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить данные регистраций');
+      }
+    }
+
+    document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const volunteer_id = document.getElementById('volunteerSelect').value;
+      const event_id = document.getElementById('eventSelect').value;
+      const messageDiv = document.getElementById('message');
+      messageDiv.textContent = '';
+
+      if (!volunteer_id || !event_id) {
+        alert('Пожалуйста, выберите волонтёра и мероприятие');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${baseUrl}/registrations`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({volunteer_id: parseInt(volunteer_id), event_id: parseInt(event_id)})
+        });
+
+        if (res.ok) {
+          messageDiv.style.color = 'green';
+          messageDiv.textContent = 'Волонтёр успешно зарегистрирован на мероприятие!';
+          await loadRegistrations();
+        } else {
+          const errorData = await res.json();
+          messageDiv.style.color = 'red';
+          messageDiv.textContent = `Ошибка: ${errorData.error || 'Неизвестная ошибка'}`;
+        }
+      } catch (error) {
+        console.error(error);
+        messageDiv.style.color = 'red';
+        messageDiv.textContent = 'Ошибка при регистрации';
+      }
+    });
+
+    // Обработчик удаления регистрации по кнопке "×"
+    document.querySelector('#registrationsTable tbody').addEventListener('click', async (e) => {
+      if (e.target.classList.contains('remove-vol')) {
+        const volunteerId = e.target.dataset.volId;
+        const eventId = e.target.dataset.eventId;
+        if (!confirm('Удалить волонтёра с мероприятия?')) return;
+
+        try {
+          const res = await fetch(`${baseUrl}/registrations`, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({volunteer_id: parseInt(volunteerId), event_id: parseInt(eventId)})
+          });
+          if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Ошибка при удалении регистрации');
+          }
+          alert('Волонтёр удалён и уведомлён');
+          await loadRegistrations();
+        } catch (error) {
+          console.error(error);
+          alert('Не удалось удалить регистрацию: ' + error.message);
+        }
+      }
+    });
+
+    // Загрузка данных при старте
+    loadVolunteers();
+    loadEvents();
+    loadRegistrations();
+  </script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Личная статистика волонтёра</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    label, select, input, textarea, button { display: block; margin: 10px 0; width: 300px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+    <nav style="background:#333; padding:10px;">
+  <a href="index.html" style="color:#fff; margin-right:15px; text-decoration:none;">Волонтёры</a>
+  <a href="events.html" style="color:#fff; margin-right:15px; text-decoration:none;">Мероприятия</a>
+  <a href="registration.html" style="color:#fff; margin-right:15px; text-decoration:none;">Регистрация</a>
+  <a href="volunteer_stats.html" style="color:#fff; margin-right:15px; text-decoration:none;">Статистика</a>
+</nav>
+  <h1>Личная статистика волонтёра</h1>
+
+  <label for="volunteerSelect">Выберите волонтёра:</label>
+  <select id="volunteerSelect" required>
+    <option value="">-- Выберите волонтёра --</option>
+  </select>
+
+  <div id="stats" style="margin-top: 20px;"></div>
+
+  <h2>Отчёты о выполненной активности</h2>
+  <table id="reportsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Мероприятие</th>
+        <th>Дата отчёта</th>
+        <th>Часы</th>
+        <th>Заметки</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Добавить новый отчёт</h2>
+  <form id="reportForm" style="max-width: 320px;">
+    <label for="eventSelect">Мероприятие:</label>
+    <select id="eventSelect" required>
+      <option value="">-- Выберите мероприятие --</option>
+    </select>
+
+    <label for="hoursInput">Часы:</label>
+    <input type="number" id="hoursInput" min="1" required />
+
+    <label for="reportDateInput">Дата отчёта:</label>
+    <input type="date" id="reportDateInput" required />
+
+    <label for="notesInput">Заметки:</label>
+    <textarea id="notesInput" rows="4" placeholder="Описание или комментарии"></textarea>
+
+    <button type="submit">Добавить отчёт</button>
+  </form>
+
+  <div id="message" style="margin-top: 15px; font-weight: bold;"></div>
+
+  <script>
+    const baseUrl = 'http://localhost:3000';
+
+    let currentVolunteerId = null;
+
+    async function loadVolunteers() {
+      try {
+        const res = await fetch(`${baseUrl}/volunteers`);
+        if (!res.ok) throw new Error('Ошибка загрузки волонтёров');
+        const volunteers = await res.json();
+        const select = document.getElementById('volunteerSelect');
+        volunteers.forEach(v => {
+          const option = document.createElement('option');
+          option.value = v.vol_id;
+          option.textContent = v.name;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить волонтёров');
+      }
+    }
+
+    async function loadEvents() {
+      try {
+        const res = await fetch(`${baseUrl}/events`);
+        if (!res.ok) throw new Error('Ошибка загрузки мероприятий');
+        const events = await res.json();
+        const select = document.getElementById('eventSelect');
+        select.innerHTML = '<option value="">-- Выберите мероприятие --</option>';
+        events.forEach(ev => {
+          const option = document.createElement('option');
+          option.value = ev.id;
+          option.textContent = ev.title;
+          select.appendChild(option);
+        });
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить мероприятия');
+      }
+    }
+
+    async function loadStats(vol_id) {
+      try {
+        currentVolunteerId = vol_id;
+
+        // Статистика
+        const resStats = await fetch(`${baseUrl}/volunteers/${vol_id}/stats`);
+        if (!resStats.ok) throw new Error('Ошибка загрузки статистики');
+        const stats = await resStats.json();
+
+        // Отчёты
+        const resReports = await fetch(`${baseUrl}/reports?volunteer_id=${vol_id}`);
+        if (!resReports.ok) throw new Error('Ошибка загрузки отчётов');
+        const reports = await resReports.json();
+
+        const statsDiv = document.getElementById('stats');
+        statsDiv.innerHTML = `<p>Количество мероприятий: ${stats.events_participated || 0}</p>`;
+
+        const table = document.getElementById('reportsTable');
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+
+        if (reports.length === 0) {
+          table.style.display = 'none';
+          statsDiv.innerHTML += '<p>Отчёты о выполненной активности отсутствуют.</p>';
+        } else {
+          table.style.display = '';
+          reports.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${r.event_title || '–'}</td>
+              <td>${r.report_date || '–'}</td>
+              <td>${r.hours || 0}</td>
+              <td>${r.notes || ''}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось загрузить статистику');
+      }
+    }
+
+    document.getElementById('volunteerSelect').addEventListener('change', (e) => {
+      const volId = e.target.value;
+      if (volId) {
+        loadStats(volId);
+      } else {
+        currentVolunteerId = null;
+        document.getElementById('stats').innerHTML = '';
+        document.getElementById('reportsTable').style.display = 'none';
+      }
+    });
+
+    document.getElementById('reportForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const event_id = document.getElementById('eventSelect').value;
+      const hours = parseInt(document.getElementById('hoursInput').value, 10);
+      const report_date = document.getElementById('reportDateInput').value;
+      const notes = document.getElementById('notesInput').value.trim();
+      const messageDiv = document.getElementById('message');
+      messageDiv.textContent = '';
+
+      if (!currentVolunteerId) {
+        alert('Пожалуйста, выберите волонтёра');
+        return;
+      }
+      if (!event_id || !hours || !report_date) {
+        alert('Пожалуйста, заполните все обязательные поля');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${baseUrl}/reports`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            volunteer_id: currentVolunteerId,
+            event_id: parseInt(event_id),
+            hours,
+            report_date,
+            notes
+          })
+        });
+
+        if (res.ok) {
+          messageDiv.style.color = 'green';
+          messageDiv.textContent = 'Отчёт успешно добавлен!';
+          // Обновляем статистику и отчёты
+          loadStats(currentVolunteerId);
+          e.target.reset();
+        } else {
+          const errorData = await res.json();
+          messageDiv.style.color = 'red';
+          messageDiv.textContent = `Ошибка: ${errorData.error || 'Неизвестная ошибка'}`;
+        }
+      } catch (error) {
+        console.error(error);
+        messageDiv.style.color = 'red';
+        messageDiv.textContent = 'Ошибка при добавлении отчёта';
+      }
+    });
+
+    // Загрузка данных при старте
+    loadVolunteers();
+    loadEvents();
+  </script>
+</body>
+</html>
